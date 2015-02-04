@@ -3,12 +3,16 @@ import sys, re, os
 import rrdtool
 
 RUNDIR = os.path.dirname(os.path.realpath(__file__))
-RRDSDIR = RUNDIR + '/rrds'
-REPORTDIR = RUNDIR + '/report'
-MemRRDFile = RRDSDIR + '/meminfo.rrd'
-CpuRRDFile = RRDSDIR + '/cpustatus.rrd'
-UptimeRRDFile = RRDSDIR + '/uptime.rrd'
+RRDSDIR = os.path.join(RUNDIR, 'rrds')
+REPORTDIR = os.path.join(RUNDIR, 'report')
+cpuRRDFile = os.path.join(RRDSDIR, 'cpustatus.rrd')
+memRRDFile = os.path.join(RRDSDIR, 'meminfo.rrd')
+uptimeRRDFile = os.path.join(RRDSDIR, 'uptime.rrd')
+mountRRDFile = os.path.join(RRDSDIR, 'mount-%s.rrd')
+netRRDFile = os.path.join(RRDSDIR, 'interface-%s.rrd')
+diskRRDFile = os.path.join(RRDSDIR, 'hdd-%s.rrd')
 
+#colors for graphs
 cRED='#FF0000'
 cGREEN='#00FF00'
 cBLUE='#0000FF'
@@ -16,6 +20,8 @@ cBROWN='#842B00'
 cPINK='#FF00FF'
 cTrans='#0000FF80'
 cList=[cRED, cGREEN, cBLUE, cBROWN, cPINK]
+
+#data sizes
 KB=1024
 MB=KB*1024
 GB=MB*1024
@@ -23,12 +29,17 @@ GB=MB*1024
 gWidth='600'
 gHeight='200'
 
+#######
+def get_path(name, period, ext = 'png'):
+    return os.file.join(REPORTDIR, name + period + '.' + ext)
+
+
 def CpuInfo(period):
     #Temp
     rrdtool.graph(REPORTDIR + '/cpuTemp' + period + '.png', '--start', period,
-        '--title', 'CPU Temperature', '-w', gWidth, '-h', gHeight, 
+        '--title', 'CPU Temperature', '-w', gWidth, '-h', gHeight,
         '--lower-limit', '40', '--upper-limit', '70',
-        'DEF:ctemp=' + CpuRRDFile + ':cputemp:AVERAGE', 
+        'DEF:ctemp=' + cpuRRDFile + ':cpuTemp:AVERAGE',
         'LINE1:ctemp' + cRED,
         'GPRINT:ctemp:AVERAGE:Avg\\:%2.0lf',
         'GPRINT:ctemp:MAX:Max\\:%2.0lf',
@@ -37,18 +48,18 @@ def CpuInfo(period):
 
     #Usage
     rrdtool.graph(REPORTDIR + '/cpuUsage' + period + '.png', '--start', period,
-        '--title', 'CPU Usage (%)', '-w', gWidth, '-h', gHeight, 
+        '--title', 'CPU Usage (%)', '-w', gWidth, '-h', gHeight,
         '--lower-limit', '0', '--upper-limit', '100',
-        'DEF:cusage=' + CpuRRDFile + ':cpuUsage:AVERAGE', 
+        'DEF:cusage=' + cpuRRDFile + ':cpuUsage:AVERAGE',
         'AREA:cusage' + cGREEN,
         'GPRINT:cusage:AVERAGE:Avg\\:%2.0lf',
         'COMMENT:\\n')
 
     #PID
     rrdtool.graph(REPORTDIR + '/PIDs' + period + '.png', '--start', period,
-        '--title', 'PIDs', '-w', gWidth, '-h', gHeight, 
-        '--lower-limit', '40', 
-        'DEF:cpid=' + CpuRRDFile + ':pids:AVERAGE', 
+        '--title', 'PIDs', '-w', gWidth, '-h', gHeight,
+        '--lower-limit', '40',
+        'DEF:cpid=' + cpuRRDFile + ':pids:AVERAGE',
         'LINE1:cpid' + cBLUE,
         'COMMENT: ',
         'GPRINT:cpid:AVERAGE:Avg\\:%2.0lf',
@@ -59,8 +70,8 @@ def CpuInfo(period):
 def UptimeInfo(period):
     #uptime
     rrdtool.graph(REPORTDIR + '/uptime' + period + '.png', '--start', period,
-        '--title', 'System Uptime', '-w', gWidth, '-h', gHeight, 
-        'DEF:cuptime=' + UptimeRRDFile + ':uptime:LAST', 
+        '--title', 'System Uptime', '-w', gWidth, '-h', gHeight,
+        'DEF:cuptime=' + uptimeRRDFile + ':uptime:LAST',
         'LINE1:cuptime' + cGREEN,
         'GPRINT:cuptime:LAST:Uptime(minutes)\\:%2.0lf',
         'COMMENT:\\n')
@@ -69,11 +80,11 @@ def MemoryInfo(period):
     #Memory Usage
     rrdtool.graph(REPORTDIR + '/memUsage' + period + '.png', '--start', period,
         '--title', 'Memory Usage', '-w', gWidth, '-h', gHeight,
-        'DEF:total=' + MemRRDFile + ':total:AVERAGE',
-        'DEF:used=' + MemRRDFile + ':used:AVERAGE',
-        'DEF:buf=' + MemRRDFile + ':buf:AVERAGE',
-        'DEF:cached=' + MemRRDFile + ':cached:AVERAGE',
-        'DEF:free=' + MemRRDFile + ':free:AVERAGE',
+        'DEF:total=' + memRRDFile + ':total:AVERAGE',
+        'DEF:used=' + memRRDFile + ':used:AVERAGE',
+        'DEF:buf=' + memRRDFile + ':buf:AVERAGE',
+        'DEF:cached=' + memRRDFile + ':cached:AVERAGE',
+        'DEF:free=' + memRRDFile + ':free:AVERAGE',
         'CDEF:usedMB=used,' + str(MB) + ',/',
         'AREA:used' + cBLUE + ':Used',
         'LINE1:total' + cRED + ':Total',
@@ -105,14 +116,14 @@ def DiskInfo(period):
 
     cmdList.append('COMMENT:\\n')
     rrdtool.graph(cmdList)
-    
+
     #Mount Point Usage
     for mp in mount_files:
         rrdfile = RRDSDIR + '/' + mp
         mp_name = mp.replace('mount-','').replace('.rrd','')
         pngfile = REPORTDIR + '/mountPoint-' + mp_name + period + '.png'
         cmdList = [pngfile, '--start', period, '-w', gWidth, '-h', gHeight,
-                '--title', mp_name + ' Usage (Bytes)', 
+                '--title', mp_name + ' Usage (Bytes)',
                 'DEF:total=' + rrdfile + ':total:AVERAGE',
                 'DEF:used=' + rrdfile + ':used:AVERAGE',
                 'DEF:free=' + rrdfile + ':free:AVERAGE',
@@ -126,16 +137,16 @@ def DiskInfo(period):
                 'GPRINT:usedGB:MIN:Min %0.2lf%S(GB)',
                 'COMMENT:\\n']
         rrdtool.graph(cmdList)
-    
+
     #Disk I/O
-    hdd_files = [f for f in os.listdir(RRDSDIR) if re.match('^hdd-\w*\.rrd', f)] 
-    
+    hdd_files = [f for f in os.listdir(RRDSDIR) if re.match('^hdd-\w*\.rrd', f)]
+
     for disk in hdd_files:
         rrdfile = RRDSDIR + '/' + disk
         disk_name = disk.replace('hdd-','').replace('.rrd','')
         pngfile = REPORTDIR + '/hdd-' + disk_name + period + '.png'
         cmdList = [pngfile, '--start', period, '-w', gWidth, '-h', gHeight,
-                '--title', disk_name + ' I/O (Bytes)', 
+                '--title', disk_name + ' I/O (Bytes)',
                 'DEF:rbytes=' + rrdfile + ':rbytes:AVERAGE',
                 'DEF:wbytes=' + rrdfile + ':wbytes:AVERAGE',
                 'CDEF:rKB=rbytes,' + str(KB) + ',/',
@@ -158,7 +169,7 @@ def NetInfo(period):
         net_name = net.replace('interface-','').replace('.rrd','')
         pngfile = REPORTDIR + '/interface-' + net_name + period + '.png'
         cmdList = [pngfile, '--start', period, '-w', gWidth, '-h', gHeight,
-                '--title', net_name + ' I/O (Bytes)', 
+                '--title', net_name + ' I/O (Bytes)',
                 'DEF:recv=' + rrdfile + ':recv:AVERAGE',
                 'DEF:send=' + rrdfile + ':send:AVERAGE',
                 'CDEF:recvKB=recv,' + str(KB) + ',/',
@@ -173,7 +184,7 @@ def NetInfo(period):
                 'COMMENT:\\n']
 
         rrdtool.graph(cmdList)
-    
+
 def usage():
     print "usage"
 
@@ -184,13 +195,13 @@ def main():
         sys.exit(1)
 
     p = sys.argv[1]
-    
+
     if not re.match('^-\d+[m,h,d,w]$', p):
         print 'formate Error...'
         sys.exit(1)
 
     CpuInfo(p)
-    UptimeInfo(p)
+    #UptimeInfo(p)
     MemoryInfo(p)
     DiskInfo(p)
     NetInfo(p)
